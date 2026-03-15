@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 
 function LoginPage() {
   const [otp, setOtp] = useState('')
@@ -114,6 +115,17 @@ function LoginPage() {
                     Login
                   </button>
                 </form>
+
+                <p className="mt-6 text-sm text-slate-400">
+                  New to CipherLab?{' '}
+                  <Link
+                    className="font-medium text-emerald-300 transition hover:text-emerald-200"
+                    to="/register"
+                  >
+                    Create an account
+                  </Link>
+                  .
+                </p>
               </div>
             </div>
           </section>
