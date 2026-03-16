@@ -16,7 +16,7 @@ SMTP_HOST = os.getenv("SMTP_HOST")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USERNAME = os.getenv("SMTP_USERNAME")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
-SMTP_SENDER = os.getenv("SMTP_SENDER", SMTP_USERNAME or "no-reply@cipherlab.local")
+SMTP_SENDER = os.getenv("SMTP_SENDER", "no-reply@cipherlab.in")
 SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
 SMTP_USE_SSL = os.getenv("SMTP_USE_SSL", "false").lower() == "true"
 SMTP_TIMEOUT_SECONDS = int(os.getenv("SMTP_TIMEOUT_SECONDS", "15"))
@@ -31,15 +31,29 @@ def hash_otp(email: str, purpose: str, otp: str) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def send_otp_email(email: str, otp: str, purpose: str) -> None:
-    subject = "CipherLab OTP Verification"
-    body = (
-        f"Your CipherLab OTP for {purpose} is {otp}. "
-        f"It will expire in {OTP_EXPIRY_MINUTES} minutes."
-    )
+def send_otp_email(
+    email: str, otp: str, purpose: str, first_name: str, last_name: str
+) -> None:
+    purpose_label = "Login" if purpose == "login" else "Signup"
+    full_name = f"{first_name.strip()} {last_name.strip()}".strip()
+    recipient_name = full_name or "User"
+    subject = f"CipherLab {purpose_label} Verification Code"
+    body = f"""Dear {recipient_name},
+
+The {purpose_label} Verification Code is : "{otp}"
+The Code Expires in {OTP_EXPIRY_MINUTES} minutes
+
+Regards,
+Cipherlab Team.
+
+Disclaimer: This is a system generated email. Please do not reply to this email.
+"""
 
     if OTP_DELIVERY_MODE == "console":
-        print(f"[CipherLab OTP] email={email} purpose={purpose} otp={otp}")
+        print(
+            "[CipherLab OTP] "
+            f"email={email} purpose={purpose} recipient={recipient_name} otp={otp}"
+        )
         return
 
     if not SMTP_HOST or not SMTP_USERNAME or not SMTP_PASSWORD:
@@ -57,10 +71,16 @@ def send_otp_email(email: str, otp: str, purpose: str) -> None:
         f"""
         <html>
           <body style="font-family: Arial, sans-serif; line-height: 1.5;">
-            <h2>CipherLab OTP Verification</h2>
-            <p>Your OTP for <strong>{purpose}</strong> is:</p>
-            <p style="font-size: 28px; font-weight: bold; letter-spacing: 4px;">{otp}</p>
-            <p>This OTP will expire in {OTP_EXPIRY_MINUTES} minutes.</p>
+            <p>Dear {recipient_name},</p>
+            <p>The {purpose_label} Verification Code is : <strong>"{otp}"</strong></p>
+            <p>The Code Expires in {OTP_EXPIRY_MINUTES} minutes</p>
+            <p>
+              Regards,<br />
+              Cipherlab Team.
+            </p>
+            <p style="font-size: 12px; color: #6b7280;">
+              Disclaimer: This is a system generated email. Please do not reply to this email.
+            </p>
           </body>
         </html>
         """,

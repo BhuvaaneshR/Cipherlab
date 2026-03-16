@@ -79,6 +79,20 @@ def _validate_otp_request_payload(payload: dict[str, str]) -> list[str]:
     return errors
 
 
+def _validate_register_otp_request_payload(payload: dict[str, str]) -> list[str]:
+    errors = _validate_otp_request_payload(payload)
+    first_name = payload.get("first_name", "").strip()
+    last_name = payload.get("last_name", "").strip()
+
+    if not first_name or not NAME_PATTERN.fullmatch(first_name):
+        errors.append("First name is required and must contain letters only.")
+
+    if not last_name or not NAME_PATTERN.fullmatch(last_name):
+        errors.append("Last name is required and must contain letters only.")
+
+    return errors
+
+
 def _validate_otp_verification_payload(payload: dict[str, str]) -> list[str]:
     errors = _validate_otp_request_payload(payload)
     otp = payload.get("otp", "").strip()
@@ -100,7 +114,9 @@ def _otp_expired(otp_record: dict[str, object]) -> bool:
     return True
 
 
-def _issue_otp(email: str, purpose: str) -> tuple[dict[str, object], int]:
+def _issue_otp(
+    email: str, purpose: str, first_name: str, last_name: str
+) -> tuple[dict[str, object], int]:
     otp = generate_otp()
     otp_hash = hash_otp(email, purpose, otp)
     upsert_email_otp(
@@ -109,7 +125,7 @@ def _issue_otp(email: str, purpose: str) -> tuple[dict[str, object], int]:
         otp_hash=otp_hash,
         expires_at_minutes=OTP_EXPIRY_MINUTES,
     )
-    send_otp_email(email, otp, purpose)
+    send_otp_email(email, otp, purpose, first_name, last_name)
 
     response = {
         "success": True,
@@ -170,7 +186,7 @@ def _verify_otp(
 @auth_blueprint.post("/register/request-otp")
 def request_register_otp():
     payload = request.get_json(silent=True) or {}
-    errors = _validate_otp_request_payload(payload)
+    errors = _validate_register_otp_request_payload(payload)
 
     if errors:
         return jsonify({"success": False, "errors": errors}), 400
@@ -189,7 +205,12 @@ def request_register_otp():
             409,
         )
 
-    response, status_code = _issue_otp(email, REGISTER_OTP_PURPOSE)
+    response, status_code = _issue_otp(
+        email,
+        REGISTER_OTP_PURPOSE,
+        payload["first_name"].strip(),
+        payload["last_name"].strip(),
+    )
     return jsonify(response), status_code
 
 
@@ -235,7 +256,12 @@ def request_login_otp():
             401,
         )
 
-    response, status_code = _issue_otp(email, LOGIN_OTP_PURPOSE)
+    response, status_code = _issue_otp(
+        email,
+        LOGIN_OTP_PURPOSE,
+        user["first_name"],
+        user["last_name"],
+    )
     return jsonify(response), status_code
 
 

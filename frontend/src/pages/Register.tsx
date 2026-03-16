@@ -227,6 +227,8 @@ function RegisterPage() {
 
     try {
       const response = await api.post('/register/request-otp', {
+        first_name: trimmedFirstName,
+        last_name: trimmedLastName,
         email: trimmedEmail.toLowerCase(),
       })
 
