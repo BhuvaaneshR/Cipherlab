@@ -1,8 +1,85 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { api } from '../lib/api'
 
 function LoginPage() {
+  const navigate = useNavigate()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [otp, setOtp] = useState('')
+  const [isRequestingOtp, setIsRequestingOtp] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [serverError, setServerError] = useState('')
+  const [serverSuccess, setServerSuccess] = useState('')
+
+  const handleRequestOtp = async () => {
+    if (!email.trim() || !password || isRequestingOtp) {
+      return
+    }
+
+    setIsRequestingOtp(true)
+    setServerError('')
+    setServerSuccess('')
+
+    try {
+      const response = await api.post('/login/request-otp', {
+        email: email.trim().toLowerCase(),
+        password,
+      })
+      setServerSuccess(response.data.message ?? 'OTP sent successfully.')
+    } catch (error: unknown) {
+      if (typeof error === 'object' && error && 'response' in error) {
+        const axiosError = error as {
+          response?: { data?: { errors?: string[]; message?: string } }
+        }
+        setServerError(
+          axiosError.response?.data?.errors?.[0] ??
+            axiosError.response?.data?.message ??
+            'Unable to send OTP right now.',
+        )
+      } else {
+        setServerError('Unable to reach the backend server.')
+      }
+    } finally {
+      setIsRequestingOtp(false)
+    }
+  }
+
+  const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
+    if (!otp.trim() || isSubmitting) {
+      return
+    }
+
+    setIsSubmitting(true)
+    setServerError('')
+    setServerSuccess('')
+
+    try {
+      const response = await api.post('/login/verify-otp', {
+        email: email.trim().toLowerCase(),
+        otp: otp.trim(),
+      })
+      setServerSuccess(response.data.message ?? 'Login successful.')
+      navigate('/dashboard')
+    } catch (error: unknown) {
+      if (typeof error === 'object' && error && 'response' in error) {
+        const axiosError = error as {
+          response?: { data?: { errors?: string[]; message?: string } }
+        }
+        setServerError(
+          axiosError.response?.data?.errors?.[0] ??
+            axiosError.response?.data?.message ??
+            'Unable to complete login right now.',
+        )
+      } else {
+        setServerError('Unable to reach the backend server.')
+      }
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.16),_transparent_30%),linear-gradient(180deg,_#020807_0%,_#071512_52%,_#020807_100%)] px-6 py-10 text-slate-100">
@@ -49,7 +126,7 @@ function LoginPage() {
                   </p>
                 </div>
 
-                <form className="space-y-6">
+                <form className="space-y-6" onSubmit={handleLogin}>
                   <div className="space-y-2">
                     <label
                       className="block font-mono text-xs uppercase tracking-[0.3em] text-emerald-200/80"
@@ -61,8 +138,10 @@ function LoginPage() {
                       className="w-full rounded-2xl border border-emerald-400/20 bg-[#020807] px-4 py-3.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-300 focus:ring-2 focus:ring-emerald-400/20"
                       id="email"
                       name="email"
+                      onChange={(event) => setEmail(event.target.value)}
                       placeholder="analyst@cipherlab.dev"
                       type="email"
+                      value={email}
                     />
                   </div>
 
@@ -77,16 +156,20 @@ function LoginPage() {
                       className="w-full rounded-2xl border border-emerald-400/20 bg-[#020807] px-4 py-3.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-300 focus:ring-2 focus:ring-emerald-400/20"
                       id="password"
                       name="password"
+                      onChange={(event) => setPassword(event.target.value)}
                       placeholder="Enter your password"
                       type="password"
+                      value={password}
                     />
                   </div>
 
                   <button
                     className="w-full rounded-2xl border border-emerald-400/40 bg-emerald-400/10 px-4 py-3.5 font-mono text-sm font-semibold uppercase tracking-[0.3em] text-emerald-200 transition hover:border-emerald-300 hover:bg-emerald-400/15"
+                    disabled={!email.trim() || !password || isRequestingOtp}
+                    onClick={handleRequestOtp}
                     type="button"
                   >
-                    Get OTP
+                    {isRequestingOtp ? 'Sending OTP...' : 'Get OTP'}
                   </button>
 
                   <div className="space-y-2">
@@ -109,12 +192,24 @@ function LoginPage() {
 
                   <button
                     className="w-full rounded-2xl bg-emerald-300 px-4 py-3.5 font-mono text-sm font-semibold uppercase tracking-[0.3em] text-[#03110c] transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400 disabled:hover:bg-slate-700"
-                    disabled={!otp.trim()}
+                    disabled={!otp.trim() || isSubmitting}
                     type="submit"
                   >
-                    Login
+                    {isSubmitting ? 'Logging In...' : 'Login'}
                   </button>
                 </form>
+
+                {serverError && (
+                  <div className="mt-6 rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+                    {serverError}
+                  </div>
+                )}
+
+                {serverSuccess && (
+                  <div className="mt-6 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+                    {serverSuccess}
+                  </div>
+                )}
 
                 <p className="mt-6 text-sm text-slate-400">
                   New to CipherLab?{' '}

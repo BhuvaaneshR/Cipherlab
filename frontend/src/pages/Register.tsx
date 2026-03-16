@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { api } from '../lib/api'
 
 const emailPattern = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/
 const lettersOnlyPattern = /^[A-Za-z]+$/
@@ -98,6 +99,11 @@ function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isRequestingOtp, setIsRequestingOtp] = useState(false)
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false)
+  const [serverError, setServerError] = useState('')
+  const [serverSuccess, setServerSuccess] = useState('')
 
   const trimmedFirstName = firstName.trim()
   const trimmedLastName = lastName.trim()
@@ -210,20 +216,123 @@ function RegisterPage() {
   const canCreateProfile =
     isEmailVerified && isPasswordFullyValid && passwordsMatch
 
-  const handleRequestOtp = () => {
-    if (!canRequestOtp) {
+  const handleRequestOtp = async () => {
+    if (!canRequestOtp || isRequestingOtp) {
       return
     }
 
-    setIsOtpRequested(true)
+    setIsRequestingOtp(true)
+    setServerError('')
+    setServerSuccess('')
+
+    try {
+      const response = await api.post('/register/request-otp', {
+        email: trimmedEmail.toLowerCase(),
+      })
+
+      setIsOtpRequested(true)
+      setServerSuccess(response.data.message ?? 'OTP sent successfully.')
+    } catch (error: unknown) {
+      if (typeof error === 'object' && error && 'response' in error) {
+        const axiosError = error as {
+          response?: { data?: { errors?: string[]; message?: string } }
+        }
+        setServerError(
+          axiosError.response?.data?.errors?.[0] ??
+            axiosError.response?.data?.message ??
+            'Unable to send OTP right now.',
+        )
+      } else {
+        setServerError('Unable to reach the backend server.')
+      }
+    } finally {
+      setIsRequestingOtp(false)
+    }
   }
 
-  const handleVerifyOtp = () => {
-    if (!normalizedOtp) {
+  const handleVerifyOtp = async () => {
+    if (!normalizedOtp || isVerifyingOtp) {
       return
     }
 
-    setIsEmailVerified(true)
+    setIsVerifyingOtp(true)
+    setServerError('')
+    setServerSuccess('')
+
+    try {
+      const response = await api.post('/register/verify-otp', {
+        email: trimmedEmail.toLowerCase(),
+        otp: normalizedOtp,
+      })
+
+      setIsEmailVerified(true)
+      setServerSuccess(response.data.message ?? 'OTP verified successfully.')
+    } catch (error: unknown) {
+      if (typeof error === 'object' && error && 'response' in error) {
+        const axiosError = error as {
+          response?: { data?: { errors?: string[]; message?: string } }
+        }
+        setServerError(
+          axiosError.response?.data?.errors?.[0] ??
+            axiosError.response?.data?.message ??
+            'Unable to verify OTP right now.',
+        )
+      } else {
+        setServerError('Unable to reach the backend server.')
+      }
+    } finally {
+      setIsVerifyingOtp(false)
+    }
+  }
+
+  const handleRegister = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
+    if (!canCreateProfile || isSubmitting) {
+      return
+    }
+
+    setIsSubmitting(true)
+    setServerError('')
+    setServerSuccess('')
+
+    try {
+      const response = await api.post('/register', {
+        first_name: trimmedFirstName,
+        last_name: trimmedLastName,
+        email: trimmedEmail.toLowerCase(),
+        password,
+        otp: normalizedOtp,
+      })
+
+      setServerSuccess(
+        response.data.message ?? 'Profile created successfully.',
+      )
+      setFirstName('')
+      setLastName('')
+      setEmail('')
+      setOtp('')
+      setIsOtpRequested(false)
+      setIsEmailVerified(false)
+      setPassword('')
+      setConfirmPassword('')
+    } catch (error: unknown) {
+      if (typeof error === 'object' && error && 'response' in error) {
+        const axiosError = error as {
+          response?: { data?: { errors?: string[]; message?: string } }
+        }
+        const firstError = axiosError.response?.data?.errors?.[0]
+        setServerError(
+          firstError ??
+            axiosError.response?.data?.message ??
+            'Unable to create your profile right now.',
+        )
+      } else {
+        setServerError('Unable to reach the backend server.')
+      }
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -272,7 +381,7 @@ function RegisterPage() {
                   </p>
                 </div>
 
-                <form className="space-y-6">
+                <form className="space-y-6" onSubmit={handleRegister}>
                   <div className="grid gap-6 sm:grid-cols-2">
                     <div className="space-y-2">
                       <label
@@ -357,11 +466,13 @@ function RegisterPage() {
 
                   <button
                     className="w-full rounded-2xl border border-emerald-400/40 bg-emerald-400/10 px-4 py-3.5 font-mono text-sm font-semibold uppercase tracking-[0.3em] text-emerald-200 transition hover:border-emerald-300 hover:bg-emerald-400/15 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-900 disabled:text-slate-500 disabled:hover:bg-slate-900"
-                    disabled={!canRequestOtp}
+                    disabled={!canRequestOtp || isRequestingOtp}
                     onClick={handleRequestOtp}
                     type="button"
                   >
-                    Verify Email Address
+                    {isRequestingOtp
+                      ? 'Sending OTP...'
+                      : 'Verify Email Address'}
                   </button>
 
                   {isOtpRequested && (
@@ -386,17 +497,12 @@ function RegisterPage() {
 
                       <button
                         className="w-full rounded-2xl bg-emerald-300 px-4 py-3.5 font-mono text-sm font-semibold uppercase tracking-[0.3em] text-[#03110c] transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400 disabled:hover:bg-slate-700"
-                        disabled={!normalizedOtp}
+                        disabled={!normalizedOtp || isVerifyingOtp}
                         onClick={handleVerifyOtp}
                         type="button"
                       >
-                        Verify OTP
+                        {isVerifyingOtp ? 'Verifying OTP...' : 'Verify OTP'}
                       </button>
-
-                      <p className="text-sm text-slate-400">
-                        Frontend placeholder: OTP submission is simulated for now
-                        and will be connected to backend email delivery next.
-                      </p>
                     </div>
                   )}
 
@@ -507,11 +613,23 @@ function RegisterPage() {
                         disabled={!canCreateProfile}
                         type="submit"
                       >
-                        Create Profile
+                        {isSubmitting ? 'Creating Profile...' : 'Create Profile'}
                       </button>
                     </div>
                   )}
                 </form>
+
+                {serverError && (
+                  <div className="mt-6 rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+                    {serverError}
+                  </div>
+                )}
+
+                {serverSuccess && (
+                  <div className="mt-6 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+                    {serverSuccess}
+                  </div>
+                )}
 
                 <p className="mt-6 text-sm text-slate-400">
                   Already registered?{' '}
