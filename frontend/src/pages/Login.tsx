@@ -61,6 +61,7 @@ function LoginPage() {
         email: email.trim().toLowerCase(),
         otp: otp.trim(),
       })
+      localStorage.setItem('userEmail', response.data.user.email)
       setServerSuccess(response.data.message ?? 'Login successful.')
       navigate('/dashboard')
     } catch (error: unknown) {

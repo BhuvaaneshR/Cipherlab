@@ -11,6 +11,7 @@ from database import (
     find_user_by_email,
     increment_otp_attempts,
     mark_otp_verified,
+    update_user_password,
     upsert_email_otp,
 )
 from otp_service import (
@@ -28,6 +29,7 @@ NAME_PATTERN = re.compile(r"^[A-Za-z]+$")
 OTP_PATTERN = re.compile(r"^\d{6}$")
 REGISTER_OTP_PURPOSE = "register"
 LOGIN_OTP_PURPOSE = "login"
+CHANGE_PASSWORD_OTP_PURPOSE = "change_password"
 
 
 def _validate_register_payload(payload: dict[str, str]) -> list[str]:
@@ -434,3 +436,76 @@ def login():
         ),
         200,
     )
+
+
+@auth_blueprint.get("/profile/<email>")
+def get_profile(email: str):
+    email = email.lower()
+    user = find_user_by_email(email)
+    if not user:
+        return jsonify({"success": False, "errors": ["User not found."]}), 404
+        
+    return jsonify({
+        "success": True,
+        "user": {
+            "first_name": user["first_name"],
+            "last_name": user["last_name"],
+            "email": user["email"]
+        }
+    }), 200
+
+
+@auth_blueprint.post("/profile/change-password/request-otp")
+def request_change_password_otp():
+    payload = request.get_json(silent=True) or {}
+    email = payload.get("email", "").strip().lower()
+    if not email:
+        return jsonify({"success": False, "errors": ["Email is required."]}), 400
+        
+    user = find_user_by_email(email)
+    if not user:
+        return jsonify({"success": False, "errors": ["User not found."]}), 404
+
+    response, status_code = _issue_otp(
+        email,
+        CHANGE_PASSWORD_OTP_PURPOSE,
+        user["first_name"],
+        user["last_name"],
+    )
+    return jsonify(response), status_code
+
+
+@auth_blueprint.post("/profile/change-password")
+def execute_password_change():
+    payload = request.get_json(silent=True) or {}
+    email = payload.get("email", "").strip().lower()
+    otp = payload.get("otp", "").strip()
+    new_password = payload.get("new_password", "")
+    
+    if not email or not otp or not new_password:
+        return jsonify({"success": False, "errors": ["Email, OTP, and new password are required."]}), 400
+        
+    user = find_user_by_email(email)
+    if not user:
+        return jsonify({"success": False, "errors": ["User not found."]}), 404
+        
+    response, status_code = _verify_otp(
+        email=email,
+        purpose=CHANGE_PASSWORD_OTP_PURPOSE,
+        otp=otp,
+        consume_on_success=True,
+    )
+    
+    if status_code != 200:
+        return jsonify(response), status_code
+        
+    password_hash = bcrypt.hashpw(
+        new_password.encode("utf-8"), bcrypt.gensalt()
+    ).decode("utf-8")
+    
+    update_user_password(email, password_hash)
+    
+    return jsonify({
+        "success": True,
+        "message": "Password changed successfully."
+    }), 200

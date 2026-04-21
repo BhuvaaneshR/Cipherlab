@@ -34,7 +34,13 @@ def hash_otp(email: str, purpose: str, otp: str) -> str:
 def send_otp_email(
     email: str, otp: str, purpose: str, first_name: str, last_name: str
 ) -> None:
-    purpose_label = "Login" if purpose == "login" else "Signup"
+    if purpose == "login":
+        purpose_label = "Login"
+    elif purpose == "change_password":
+        purpose_label = "Password Change"
+    else:
+        purpose_label = "Signup"
+        
     full_name = f"{first_name.strip()} {last_name.strip()}".strip()
     recipient_name = full_name or "User"
     subject = f"CipherLab {purpose_label} Verification Code"

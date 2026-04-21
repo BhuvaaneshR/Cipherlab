@@ -3,6 +3,7 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 
 load_dotenv()
+from analysis import analysis_blueprint
 from auth import auth_blueprint
 
 
@@ -20,6 +21,7 @@ def create_app() -> Flask:
         },
     )
     app.register_blueprint(auth_blueprint)
+    app.register_blueprint(analysis_blueprint)
 
     @app.get("/health")
     def health_check():

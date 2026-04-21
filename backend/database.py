@@ -145,3 +145,15 @@ def consume_otp(otp_id: int) -> dict[str, Any] | None:
         connection.commit()
 
     return consumed_record
+
+
+def update_user_password(email: str, password_hash: str) -> None:
+    query = """
+        UPDATE users
+        SET password_hash = %s
+        WHERE email = %s
+    """
+    with pool.connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(query, (password_hash, email))
+        connection.commit()
